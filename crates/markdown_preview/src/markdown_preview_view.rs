@@ -341,15 +341,26 @@ impl MarkdownPreviewView {
                 cx.background_executor().timer(REPARSE_DEBOUNCE).await;
             }
 
-            let (contents, file_location) = view.update(cx, |_, cx| {
+            let (contents, file_location, workspace_root) = view.update(cx, |this, cx| {
                 let editor = editor.read(cx);
                 let contents = editor.buffer().read(cx).snapshot(cx).text();
                 let file_location = MarkdownPreviewView::get_folder_for_active_editor(editor, cx);
-                (contents, file_location)
+
+                let mut workspace_root = None;
+
+                if let Some(workspace) = this.workspace.upgrade() {
+                    let project = workspace.read(cx).project();
+
+                    if let Some(tree) = project.read(cx).worktrees(cx).next() {
+                        workspace_root = Some(tree.read(cx).abs_path().to_path_buf());
+                    }
+                }
+
+                (contents, file_location, workspace_root)
             })?;
 
             let parsing_task = cx.background_spawn(async move {
-                parse_markdown(&contents, file_location, Some(language_registry)).await
+                parse_markdown(&contents, file_location, workspace_root, Some(language_registry)).await
             });
             let contents = parsing_task.await;
 

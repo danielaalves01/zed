@@ -19,12 +19,14 @@ use ui::SharedString;
 pub async fn parse_markdown(
     markdown_input: &str,
     file_location_directory: Option<PathBuf>,
+    workspace_directory: Option<PathBuf>,
     language_registry: Option<Arc<LanguageRegistry>>,
 ) -> ParsedMarkdown {
     let parser = Parser::new_ext(markdown_input, PARSE_OPTIONS);
     let parser = MarkdownParser::new(
         parser.into_offset_iter().collect(),
         file_location_directory,
+        workspace_directory,
         language_registry,
     );
     let renderer = parser.parse_document().await;
@@ -58,6 +60,7 @@ struct MarkdownParser<'a> {
     /// The blocks that we have successfully parsed so far
     parsed: Vec<ParsedMarkdownElement>,
     file_location_directory: Option<PathBuf>,
+    workspace_directory: Option<PathBuf>,
     language_registry: Option<Arc<LanguageRegistry>>,
 }
 
@@ -90,11 +93,13 @@ impl<'a> MarkdownParser<'a> {
     fn new(
         tokens: Vec<(Event<'a>, Range<usize>)>,
         file_location_directory: Option<PathBuf>,
+        workspace_directory: Option<PathBuf>,
         language_registry: Option<Arc<LanguageRegistry>>,
     ) -> Self {
         Self {
             tokens,
             file_location_directory,
+            workspace_directory,
             language_registry,
             cursor: 0,
             parsed: vec![],
@@ -393,6 +398,7 @@ impl<'a> MarkdownParser<'a> {
                     Tag::Link { dest_url, .. } => {
                         link = Link::identify(
                             self.file_location_directory.clone(),
+                            self.workspace_directory.clone(),
                             dest_url.to_string(),
                         );
                     }
@@ -410,6 +416,7 @@ impl<'a> MarkdownParser<'a> {
                             dest_url.to_string(),
                             source_range.clone(),
                             self.file_location_directory.clone(),
+                            self.workspace_directory.clone(),
                         );
                     }
                     _ => {
@@ -1114,7 +1121,10 @@ impl<'a> MarkdownParser<'a> {
                 } else if local_name!("a") == name.local {
                     if let Some(url) = Self::attr_value(attrs, local_name!("href"))
                         && let Some(link) =
-                            Link::identify(self.file_location_directory.clone(), url)
+                            Link::identify(
+                                self.file_location_directory.clone(),
+                                self.workspace_directory.clone(),
+                                url)
                     {
                         highlights.push(MarkdownHighlight::Style(MarkdownHighlightStyle {
                             link: true,
@@ -1342,7 +1352,12 @@ impl<'a> MarkdownParser<'a> {
     ) -> Option<Image> {
         let src = Self::attr_value(attrs, local_name!("src"))?;
 
-        let mut image = Image::identify(src, source_range, self.file_location_directory.clone())?;
+        let mut image = Image::identify(
+            src,
+            source_range,
+            self.file_location_directory.clone(),
+            self.workspace_directory.clone()
+        )?;
 
         if let Some(alt) = Self::attr_value(attrs, local_name!("alt")) {
             image.set_alt_text(alt.into());
@@ -1524,7 +1539,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     async fn parse(input: &str) -> ParsedMarkdown {
-        parse_markdown(input, None, None).await
+        parse_markdown(input, None, None, None).await
     }
 
     #[gpui::test]
@@ -1840,6 +1855,71 @@ mod tests {
                         width: None,
                     },)
                 );
+    }
+
+    #[gpui::test]
+    async fn test_workspace_absolute_path_resolution() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace_root = temp_dir.path();
+
+        let dummy_image_path = workspace_root.join("test_image.png");
+        std::fs::write(&dummy_image_path, "mock data").unwrap();
+ 
+        let parsed = parse_markdown(
+            "![Alt text](/test_image.png)\n",
+            None,
+            Some(workspace_root.to_path_buf()),
+            None
+        ).await;
+
+        let paragraph = if let ParsedMarkdownElement::Paragraph(text) = &parsed.children[0] {
+            text
+        } else {
+            panic!("Expected a paragraph");
+        };
+
+        assert_eq!(
+            paragraph[0],
+            MarkdownParagraphChunk::Image(Image {
+                source_range: 0..29,
+                link: Link::Path {
+                    display_path: std::path::PathBuf::from("/test_image.png"),
+                    path: dummy_image_path
+                },
+                alt_text: Some("Alt text".into()),
+                height: None,
+                width: None,
+            })
+        );
+    }
+
+    #[gpui::test]
+    async fn test_workspace_absolute_path_missing_file_fallback() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let workspace_root = temp_dir.path();
+
+        let parsed = parse_markdown(
+            "![Alt text](/missing_image.png)\n",
+            None,
+            Some(workspace_root.to_path_buf()),
+            None
+        ).await;
+
+        let paragraph = if let ParsedMarkdownElement::Paragraph(text) = &parsed.children[0] {
+            text
+        } else {
+            panic!("Expected a paragraph");
+        };
+
+        assert_eq!(
+            paragraph[0],
+            MarkdownParagraphChunk::Text(ParsedMarkdownText {
+                source_range: 0..32,
+                contents: "Alt text".into(),
+                highlights: [].to_vec(),
+                regions: [].to_vec(),
+            })
+        );
     }
 
     #[gpui::test]
@@ -3163,6 +3243,7 @@ fn main() {
 }
 ```
 ",
+            None,
             None,
             Some(language_registry),
         )

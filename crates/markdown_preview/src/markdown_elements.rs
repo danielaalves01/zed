@@ -293,7 +293,7 @@ pub enum Link {
 }
 
 impl Link {
-    pub fn identify(file_location_directory: Option<PathBuf>, text: String) -> Option<Link> {
+    pub fn identify(file_location_directory: Option<PathBuf>, workspace_directory: Option<PathBuf>, text: String) -> Option<Link> {
         if text.starts_with("http") {
             return Some(Link::Web { url: text });
         }
@@ -304,6 +304,19 @@ impl Link {
             .unwrap_or(text);
 
         let path = PathBuf::from(&decoded_text);
+
+        if let Ok(relative_path) = path.strip_prefix("/") {
+            if let Some(root) = &workspace_directory {
+                let absolute_path = root.join(relative_path);
+                if absolute_path.exists() {
+                    return Some(Link::Path {
+                        display_path: path.clone(),
+                        path : absolute_path
+                    });
+                }
+            }
+        }
+
         if path.is_absolute() && path.exists() {
             return Some(Link::Path {
                 display_path: path.clone(),
@@ -348,8 +361,9 @@ impl Image {
         text: String,
         source_range: Range<usize>,
         file_location_directory: Option<PathBuf>,
+        workspace_directory: Option<PathBuf>,
     ) -> Option<Self> {
-        let link = Link::identify(file_location_directory, text)?;
+        let link = Link::identify(file_location_directory, workspace_directory, text)?;
         Some(Self {
             source_range,
             link,

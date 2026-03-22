@@ -41,3 +41,4 @@ mermaid-rs-renderer.workspace = true
 [dev-dependencies]
 editor = { workspace = true, features = ["test-support"] }
 language = { workspace = true, features = ["test-support"] }
+tempfile = { workspace = true }

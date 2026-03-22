@@ -10286,6 +10286,7 @@ dependencies = [
  "pulldown-cmark 0.13.0",
  "settings",
  "stacksafe",
+ "tempfile",
  "theme",
  "ui",
  "urlencoding",
