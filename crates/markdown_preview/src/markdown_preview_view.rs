@@ -883,7 +883,11 @@ mod tests {
             Some(workspace_directory),
         );
 
-        let expected_missing_path = std::path::PathBuf::from("/missing_image.png");
+        let expected_missing_path = if std::path::Path::new("/missing_image.png").is_absolute() {
+            std::path::PathBuf::from("/missing_image.png")
+        } else {
+            base_directory.join("/missing_image.png")
+        };
 
         match resolved_missing {
             Some(ImageSource::Resource(Resource::Path(p))) => {
