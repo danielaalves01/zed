@@ -886,6 +886,8 @@ mod tests {
         let expected_missing_path = if std::path::Path::new("/missing_image.png").is_absolute() {
             std::path::PathBuf::from("/missing_image.png")
         } else {
+            // join is to retain windows path prefix C:/
+            #[expect(clippy::join_absolute_paths)]
             base_directory.join("/missing_image.png")
         };
 
