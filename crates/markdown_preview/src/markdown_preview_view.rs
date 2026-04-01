@@ -601,7 +601,6 @@ impl MarkdownPreviewView {
         .show_root_block_markers()
         .image_resolver({
             let base_directory = self.base_directory.clone();
-            let workspace_directory = workspace_directory.clone();
             move |dest_url| {
                 resolve_preview_image(
                     dest_url,
