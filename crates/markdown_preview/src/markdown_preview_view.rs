@@ -602,7 +602,13 @@ impl MarkdownPreviewView {
         .image_resolver({
             let base_directory = self.base_directory.clone();
             let workspace_directory = workspace_directory.clone();
-            move |dest_url| resolve_preview_image(dest_url, base_directory.as_deref(), workspace_directory.as_deref())
+            move |dest_url| {
+                resolve_preview_image(
+                    dest_url,
+                    base_directory.as_deref(),
+                    workspace_directory.as_deref(),
+                )
+            }
         })
         .on_url_click(move |url, window, cx| {
             open_preview_url(url, base_directory.clone(), &workspace, window, cx);
@@ -696,7 +702,11 @@ fn resolve_preview_path(url: &str, base_directory: Option<&Path>) -> Option<Path
     }
 }
 
-fn resolve_preview_image(dest_url: &str, base_directory: Option<&Path>, workspace_directory: Option<&Path>) -> Option<ImageSource> {
+fn resolve_preview_image(
+    dest_url: &str,
+    base_directory: Option<&Path>,
+    workspace_directory: Option<&Path>,
+) -> Option<ImageSource> {
     if dest_url.starts_with("data:") {
         return None;
     }
@@ -800,12 +810,12 @@ impl Render for MarkdownPreviewView {
 
 #[cfg(test)]
 mod tests {
+    use crate::markdown_preview_view::ImageSource;
+    use crate::markdown_preview_view::Resource;
+    use crate::markdown_preview_view::resolve_preview_image;
     use anyhow::Result;
     use std::fs;
     use tempfile::TempDir;
-    use crate::markdown_preview_view::resolve_preview_image;
-    use crate::markdown_preview_view::ImageSource;
-    use crate::markdown_preview_view::Resource;
 
     use super::resolve_preview_path;
 
@@ -858,7 +868,7 @@ mod tests {
         let resolved_success = resolve_preview_image(
             "/test_image.png",
             Some(&base_directory),
-            Some(workspace_directory)
+            Some(workspace_directory),
         );
 
         match resolved_success {
@@ -871,7 +881,7 @@ mod tests {
         let resolved_missing = resolve_preview_image(
             "/missing_image.png",
             Some(&base_directory),
-            Some(workspace_directory)
+            Some(workspace_directory),
         );
 
         let expected_missing_path = if std::path::Path::new("/missing_image.png").is_absolute() {
